@@ -20,7 +20,7 @@ from agent import run_agent
 
 
 # ========== НАСТРОЙКИ - ВСТАВЬТЕ ВАШИ ДАННЫЕ ==========
-VK_TOKEN = "vk1.a.i1dQB0_Krcc7f0X8lO8kfB9N2H4tr4_l7nmlECeYLL1dCjHJslhP0mGVmnW3K63BmNpQWeuXhjmxWIw7IhsaszBPpf_v0J3lU-yFQHPSyvJEWtF42bsq1YD0jVWVFWPJhQgff2BI_9smMQfA4dpXquS3uBnSQqm8t-rso9Fy1DflKRUXkzoGBOQJVgj3Pxav0O9lifwDM-mfvczOUiDtyQ"  # Замените на ваш реальный токен
+VK_TOKEN = "vk1.a.tpPdhgLXTzh9Xgj17Ba3tWM1IV8PLwLolSblC_FtcqeC8y3_n4ITsetsJkJPtxoZ95Lx9eEWEVEmWhTfqMHMUR4uon7J1fnL6w6RrHlLo5NHkNlEc9Qb_LWB0NMEM2Qpoey6rhRN1gsuQARlI7-NpOSCRClJsYcHRuAeYzbFmFrLj_iJaD1vs1FOlq9vvqfBf11Ru6UhwEuRcp-_W0fODw"
 GROUP_ID = 237717966  # ID вашей группы
 
 
@@ -168,9 +168,9 @@ def create_main_keyboard():
         "one_time": False,
         "buttons": [
             [
-                {"color": "primary", "action": {"type": "text", "label": "📰 Новости"}},
-                {"color": "secondary", "action": {"type": "text", "label": "⚙ Настройки"}},
-                {"color": "secondary", "action": {"type": "text", "label": "ℹ Помощь"}}
+                {"color": "primary", "action": {"type": "text", "label": "Новости"}},
+                {"color": "secondary", "action": {"type": "text", "label": "Настройки"}},
+                {"color": "secondary", "action": {"type": "text", "label": "Помощь"}}
             ]
         ]
     }
@@ -182,11 +182,11 @@ def create_settings_keyboard():
         "one_time": True,
         "buttons": [
             [
-                {"color": "primary", "action": {"type": "text", "label": "📂 Тема"}},
-                {"color": "primary", "action": {"type": "text", "label": "🎨 Стиль"}}
+                {"color": "primary", "action": {"type": "text", "label": "Тема"}},
+                {"color": "primary", "action": {"type": "text", "label": "Стиль"}}
             ],
             [
-                {"color": "secondary", "action": {"type": "text", "label": "◀ Назад"}}
+                {"color": "secondary", "action": {"type": "text", "label": "Назад"}}
             ]
         ]
     }
@@ -198,16 +198,16 @@ def create_topics_keyboard():
         "one_time": True,
         "buttons": [
             [
-                {"color": "primary", "action": {"type": "text", "label": "💻 Технологии"}},
-                {"color": "primary", "action": {"type": "text", "label": "⚽ Спорт"}}
+                {"color": "primary", "action": {"type": "text", "label": "Технологии"}},
+                {"color": "primary", "action": {"type": "text", "label": "Спорт"}}
             ],
             [
-                {"color": "primary", "action": {"type": "text", "label": "📊 Бизнес"}},
-                {"color": "primary", "action": {"type": "text", "label": "🔬 Наука"}}
+                {"color": "primary", "action": {"type": "text", "label": "Бизнес"}},
+                {"color": "primary", "action": {"type": "text", "label": "Наука"}}
             ],
             [
-                {"color": "primary", "action": {"type": "text", "label": "💻 IT"}},
-                {"color": "secondary", "action": {"type": "text", "label": "◀ Назад"}}
+                {"color": "primary", "action": {"type": "text", "label": "IT"}},
+                {"color": "secondary", "action": {"type": "text", "label": "Назад"}}
             ]
         ]
     }
@@ -219,15 +219,15 @@ def create_styles_keyboard():
         "one_time": True,
         "buttons": [
             [
-                {"color": "primary", "action": {"type": "text", "label": "📋 Официальный"}},
-                {"color": "primary", "action": {"type": "text", "label": "💬 Неформальный"}}
+                {"color": "primary", "action": {"type": "text", "label": "Официальный"}},
+                {"color": "primary", "action": {"type": "text", "label": "Неформальный"}}
             ],
             [
-                {"color": "primary", "action": {"type": "text", "label": "📝 Краткий"}},
-                {"color": "primary", "action": {"type": "text", "label": "📖 Подробный"}}
+                {"color": "primary", "action": {"type": "text", "label": "Краткий"}},
+                {"color": "primary", "action": {"type": "text", "label": "Подробный"}}
             ],
             [
-                {"color": "secondary", "action": {"type": "text", "label": "◀ Назад"}}
+                {"color": "secondary", "action": {"type": "text", "label": "Назад"}}
             ]
         ]
     }
@@ -243,19 +243,19 @@ def handle_message(vk, user_id: int, message: str):
 
         vk.messages.send(
             user_id=user_id,
-            message="🤖 Привет! Я NewsAgent - твой персональный новостной бот.\n\n"
-                    "📌 Я собираю новости из разных источников и присылаю тебе подборку.\n\n"
-                    "📰 Нажми «Новости» - сразу получу подборку\n"
-                    "⚙ Нажми «Настройки» - изменю тему или стиль\n"
-                    "ℹ Нажми «Помощь» - покажу список команд\n\n"
-                    "👇 Нажми на кнопку, чтобы начать!",
+            message="Привет! Я NewsAgent - твой персональный новостной бот.\n\n"
+                    "Я собираю новости из разных источников и присылаю тебе подборку.\n\n"
+                    "Нажми «Новости» - сразу получу подборку\n"
+                    "Нажми «Настройки» - изменю тему или стиль\n"
+                    "Нажми «Помощь» - покажу список команд\n\n"
+                    "Нажми на кнопку, чтобы начать!",
             random_id=0,
             keyboard=create_main_keyboard()
         )
         return
 
     # Получить новости
-    if msg_lower in ["📰 новости", "новости"]:
+    if msg_lower in ["новости", "новости"]:
         settings = get_user_settings(user_id)
         if not settings:
             register_user(user_id)
@@ -263,7 +263,7 @@ def handle_message(vk, user_id: int, message: str):
 
         vk.messages.send(
             user_id=user_id,
-            message="🔄 Собираю свежие новости...\nЭто может занять несколько секунд.",
+            message="Собираю свежие новости...\nЭто может занять несколько секунд.",
             random_id=0
         )
 
@@ -280,8 +280,8 @@ def handle_message(vk, user_id: int, message: str):
         vk.messages.send(
             user_id=user_id,
             message=f"⚙ Твои настройки:\n\n"
-                    f"📂 Тема: {settings['topic']}\n"
-                    f"🎨 Стиль: {settings['style']}\n\n"
+                    f"Тема: {settings['topic']}\n"
+                    f"Стиль: {settings['style']}\n\n"
                     f"Что хочешь изменить?",
             random_id=0,
             keyboard=create_settings_keyboard()
@@ -289,15 +289,15 @@ def handle_message(vk, user_id: int, message: str):
         return
 
     # Смена темы
-    if msg_lower in ["📂 тема", "тема"]:
+    if msg_lower in ["тема", "тема"]:
         vk.messages.send(
             user_id=user_id,
-            message="📂 Выбери тему новостей:\n\n"
-                    "💻 Технологии - ИИ, нейросети, гаджеты\n"
-                    "⚽ Спорт - футбол, хоккей, теннис\n"
-                    "📊 Бизнес - экономика, финансы\n"
-                    "🔬 Наука - космос, открытия\n"
-                    "💻 IT - программирование, разработка",
+            message="Выбери тему новостей:\n\n"
+                    "Технологии - ИИ, нейросети, гаджеты\n"
+                    "Спорт - футбол, хоккей, теннис\n"
+                    "Бизнес - экономика, финансы\n"
+                    "Наука - космос, открытия\n"
+                    "IT - программирование, разработка",
             random_id=0,
             keyboard=create_topics_keyboard()
         )
@@ -305,15 +305,15 @@ def handle_message(vk, user_id: int, message: str):
 
     # Обработка выбора темы
     topic_map = {
-        "💻 технологии": "technology",
         "технологии": "technology",
-        "⚽ спорт": "sport",
+        "технологии": "technology",
         "спорт": "sport",
-        "📊 бизнес": "business",
+        "спорт": "sport",
         "бизнес": "business",
-        "🔬 наука": "science",
+        "бизнес": "business",
         "наука": "science",
-        "💻 it": "it",
+        "наука": "science",
+        "it": "it",
         "it": "it"
     }
 
@@ -322,22 +322,22 @@ def handle_message(vk, user_id: int, message: str):
             if update_user_topic(user_id, topic_key):
                 vk.messages.send(
                     user_id=user_id,
-                    message=f"✅ Тема изменена на {topic_key}\n\n"
-                            f"📰 Нажми «Новости», чтобы увидеть подборку!",
+                    message=f"Тема изменена на {topic_key}\n\n"
+                            f"Нажми «Новости», чтобы увидеть подборку!",
                     random_id=0,
                     keyboard=create_main_keyboard()
                 )
             return
 
     # Смена стиля
-    if msg_lower in ["🎨 стиль", "стиль"]:
+    if msg_lower in ["стиль", "стиль"]:
         vk.messages.send(
             user_id=user_id,
-            message="🎨 Выбери стиль изложения:\n\n"
-                    "📋 Официальный - деловой, профессиональный\n"
-                    "💬 Неформальный - дружелюбный, с эмодзи\n"
-                    "📝 Краткий - только самое важное\n"
-                    "📖 Подробный - максимально детально",
+            message="Выбери стиль изложения:\n\n"
+                    "Официальный - деловой, профессиональный\n"
+                    "Неформальный - дружелюбный, с эмодзи\n"
+                    "Краткий - только самое важное\n"
+                    "Подробный - максимально детально",
             random_id=0,
             keyboard=create_styles_keyboard()
         )
@@ -345,13 +345,13 @@ def handle_message(vk, user_id: int, message: str):
 
     # Обработка выбора стиля
     style_map = {
-        "📋 официальный": "formal",
         "официальный": "formal",
-        "💬 неформальный": "casual",
+        "официальный": "formal",
         "неформальный": "casual",
-        "📝 краткий": "brief",
+        "неформальный": "casual",
         "краткий": "brief",
-        "📖 подробный": "detailed",
+        "краткий": "brief",
+        "подробный": "detailed",
         "подробный": "detailed"
     }
 
@@ -360,7 +360,7 @@ def handle_message(vk, user_id: int, message: str):
             if update_user_style(user_id, style_key):
                 vk.messages.send(
                     user_id=user_id,
-                    message=f"✅ Стиль изменён на {STYLES[style_key]['description']}",
+                    message=f"Стиль изменён на {STYLES[style_key]['description']}",
                     random_id=0,
                     keyboard=create_main_keyboard()
                 )
@@ -371,23 +371,23 @@ def handle_message(vk, user_id: int, message: str):
         vk.messages.send(
             user_id=user_id,
             message="ℹ Помощь по командам:\n\n"
-                    "📰 Новости - получить свежую подборку\n"
-                    "⚙ Настройки - изменить тему или стиль\n"
-                    "📂 Тема - выбрать категорию новостей\n"
-                    "🎨 Стиль - выбрать стиль изложения\n"
-                    "◀ Назад - вернуться в главное меню\n\n"
-                    "🔄 Бот обновляет новости каждый час\n\n"
-                    "❓ Есть вопросы? Пиши разработчику!",
+                    "Новости - получить свежую подборку\n"
+                    "Настройки - изменить тему или стиль\n"
+                    "Тема - выбрать категорию новостей\n"
+                    "Стиль - выбрать стиль изложения\n"
+                    "Назад - вернуться в главное меню\n\n"
+                    "Бот обновляет новости каждый час\n\n"
+                    "Есть вопросы? Пиши разработчику!",
             random_id=0,
             keyboard=create_main_keyboard()
         )
         return
 
     # Назад
-    if msg_lower in ["◀ назад", "назад"]:
+    if msg_lower in ["назад", "назад"]:
         vk.messages.send(
             user_id=user_id,
-            message="◀ Вернулись в главное меню",
+            message="Вернулись в главное меню",
             random_id=0,
             keyboard=create_main_keyboard()
         )
@@ -396,11 +396,11 @@ def handle_message(vk, user_id: int, message: str):
     # Ответ по умолчанию
     vk.messages.send(
         user_id=user_id,
-        message="❓ Не понял команду.\n\n"
+        message="Не понял команду.\n\n"
                 "Нажми на кнопку или введи:\n"
-                "• «Новости» - получить подборку\n"
-                "• «Настройки» - изменить параметры\n"
-                "• «Помощь» - список команд",
+                "«Новости» - получить подборку\n"
+                "«Настройки» - изменить параметры\n"
+                "«Помощь» - список команд",
         random_id=0,
         keyboard=create_main_keyboard()
     )
@@ -416,9 +416,9 @@ def run_vk_bot():
     longpoll = VkBotLongPoll(vk_session, GROUP_ID)
 
     print("=" * 50)
-    print("🤖 VK-бот NewsAgent запущен!")
-    print(f"📱 ID группы: {GROUP_ID}")
-    print("⏳ Ожидание сообщений...")
+    print("VK-бот NewsAgent запущен!")
+    print(f"ID группы: {GROUP_ID}")
+    print("Ожидание сообщений...")
     print("=" * 50)
 
     for event in longpoll.listen():
@@ -435,7 +435,7 @@ def schedule_news():
     """Фоновый поток для периодической рассылки"""
     time.sleep(30)  # Ждём 30 секунд перед первой рассылкой
     while True:
-        print(f"\n⏰ {datetime.now()} - Плановая рассылка новостей")
+        print(f"\n{datetime.now()} - Плановая рассылка новостей")
         send_news_to_all()
         time.sleep(CHECK_INTERVAL)
 
@@ -450,6 +450,6 @@ if __name__ == "__main__":
     try:
         run_vk_bot()
     except KeyboardInterrupt:
-        print("\n🛑 Бот остановлен пользователем")
+        print("\nБот остановлен пользователем")
     except Exception as e:
-        print(f"\n❌ Критическая ошибка: {e}")
+        print(f"\nКритическая ошибка: {e}")
