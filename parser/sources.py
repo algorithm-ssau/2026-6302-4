@@ -2,11 +2,10 @@
 
 from typing import List, Dict, Optional, Union
 from enum import Enum
-import re
 
 # Импортируем наши готовые парсеры
-from RSSparser import get_news_from_rss
-from HTMLparser import parse_html_page
+from .rss_parser import get_news_from_rss
+from .html_parser import parse_html_page
 
 class SourceType(Enum):
     # Типы источников
