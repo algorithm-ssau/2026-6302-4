@@ -135,6 +135,43 @@ DEFAULT_SOURCES = [
     Source("Lenta.ru (HTML)", "https://lenta.ru", SourceType.HTML),
     Source("РБК (HTML)", "https://www.rbc.ru", SourceType.HTML),
     Source("РИА Лента (HTML)", "https://ria.ru/lenta/", SourceType.HTML),
+
+    # НОВЫЕ ТЕХНОЛОГИЧЕСКИЕ
+    Source("VC.ru (RSS)", "https://vc.ru/rss", SourceType.RSS),
+    Source("DTF (RSS)", "https://dtf.ru/rss/all", SourceType.RSS),
+    Source("iXBT.com (RSS)", "https://www.ixbt.com/news.rss", SourceType.RSS),
+    Source("3DNews (RSS)", "https://3dnews.ru/news/rss/", SourceType.RSS),
+    Source("Ferra.ru (RSS)", "https://www.ferra.ru/rss/news.xml", SourceType.RSS),
+    Source("Overclockers (RSS)", "https://www.overclockers.ru/rss/news.rss", SourceType.RSS),
+
+    # НАУЧНЫЕ
+    Source("N+1 (RSS)", "https://nplus1.ru/rss", SourceType.RSS),
+    Source("TechInsider (RSS)", "https://www.techinsider.ru/rss/all.xml", SourceType.RSS),
+    Source("Naked Science (RSS)", "https://naked-science.ru/rss", SourceType.RSS),
+    Source("TechInsider (RSS)", "https://www.techinsider.ru/rss/all.xml", SourceType.RSS),
+    Source("Элементы большой науки (RSS)", "https://elementy.ru/rss", SourceType.RSS),
+    Source("Индикатор (RSS)", "https://indicator.ru/rss", SourceType.RSS),
+    Source("Наука и жизнь (RSS)", "http://www.nkj.ru/archive/rss/", SourceType.RSS),
+    Source("ПостНаука (RSS)", "https://postnauka.ru/feed", SourceType.RSS),
+    Source("Чердак (RSS)", "https://chrdk.ru/rss", SourceType.RSS),
+    Source("Биомолекула (RSS)", "https://biomolecula.ru/feed", SourceType.RSS),
+
+    # ДЕЛОВЫЕ С ТЕХНОЛОГИЯМИ
+    Source("Коммерсантъ (RSS)", "https://www.kommersant.ru/RSS/news.xml", SourceType.RSS),
+    Source("Ведомости (RSS)", "https://www.vedomosti.ru/rss/news", SourceType.RSS),
+
+    # МЕЖДУНАРОДНЫЕ РУССКОЯЗЫЧНЫЕ
+    Source("BBC Russian (RSS)", "https://www.bbc.com/russian/rss.xml", SourceType.RSS),
+
+    #СПОРТ
+    Source("Спорт-Экспресс (RSS)", "https://www.sport-express.ru/rss/", SourceType.RSS),
+    Source("Спорт-Экспресс футбол (RSS)", "https://www.sport-express.ru/rss/football/", SourceType.RSS),
+    Source("Спорт-Экспресс хоккей (RSS)", "https://www.sport-express.ru/rss/hockey/", SourceType.RSS),
+    Source("Чемпионат (RSS)", "https://www.championat.com/rss/news/", SourceType.RSS),
+    Source("Советский спорт (RSS)", "https://www.sovsport.ru/export/rss/all", SourceType.RSS),
+    Source("Sports.ru (RSS)", "https://www.sports.ru/rss/", SourceType.RSS),
+    Source("Евро-Футбол (RSS)", "https://www.euro-football.ru/export/rss/news", SourceType.RSS),
+    Source("Sportbox (RSS)", "https://news.sportbox.ru/rss/main", SourceType.RSS),
 ]
 
 
