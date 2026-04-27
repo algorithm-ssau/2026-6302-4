@@ -1,455 +1,720 @@
-"""
-VK-бот NewsAgent
-Отправляет новости пользователям по подписке
-"""
-import sys
-import os
-import threading
-import time
-import sqlite3
-from datetime import datetime
-
-# Добавляем текущую папку в пути поиска модулей
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# vk_bot.py
+# VK-бот NewsAgent v3.2 — ИСПРАВЛЕННАЯ ДЕДУПЛИКАЦИЯ
 
 import vk_api
-from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
+from vk_api.longpoll import VkLongPoll, VkEventType
+from vk_api.keyboard import VkKeyboard, VkKeyboardColor
+import random
+import os
+import sys
+import json
+import threading
+import time
+import re
+from datetime import datetime
+from typing import Dict, List, Optional
+from dotenv import load_dotenv
+import logging
 
-from config import CHECK_INTERVAL, DEFAULT_STYLE, STYLES
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 from agent import run_agent
+from qa_agent import ask_question
+from filter import clear_sent_cache, get_cache_size
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+load_dotenv()
+
+VK_TOKEN = os.getenv("VK_TOKEN")
+GROUP_ID = os.getenv("VK_GROUP_ID", "237717966")
+
+if not VK_TOKEN:
+    print("❌ Ошибка: не найден VK_TOKEN в файле .env")
+    sys.exit(1)
+
+vk_session = vk_api.VkApi(token=VK_TOKEN)
+vk = vk_session.get_api()
+longpoll = VkLongPoll(vk_session)
+
+# ═══════════════════════════════════════════════════════════════
+# НАСТРОЙКИ ТЕМ
+# ═══════════════════════════════════════════════════════════════
+
+TOPICS = {
+    "технологии": {
+        "name": "🤖 Технологии и ИИ",
+        "keywords": [
+            "технологии", "искусственный интеллект", "нейросети",
+            "машинное обучение", "программирование", "IT",
+            "цифровизация", "автоматизация", "гаджеты", "роботы",
+            "приложения", "софт", "разработка", "инновации",
+            "компьютер", "смартфон", "интернет", "сайт"
+        ],
+        "description": "новости про технологии, искусственный интеллект и программирование",
+        "threshold": 0.08
+    },
+    "спорт": {
+        "name": "⚽ Спорт",
+        "keywords": [
+            "спорт", "футбол", "хоккей", "баскетбол", "теннис",
+            "чемпионат", "турнир", "олимпиада", "матч", "победа",
+            "игрок", "команда", "тренер", "стадион", "счет",
+            "гол", "очко", "медаль", "соревнование", "спартакиада"
+        ],
+        "description": "спортивные новости, результаты матчей, турниры",
+        "threshold": 0.08
+    },
+    "наука": {
+        "name": "🔬 Наука",
+        "keywords": [
+            "наука", "исследование", "ученые", "открытие", "эксперимент",
+            "космос", "физика", "химия", "биология", "генетика",
+            "медицина", "вакцина", "лекарство", "лаборатория", "институт",
+            "академия", "диссертация", "публикация", "журнал", "научный"
+        ],
+        "description": "научные открытия, исследования, достижения науки",
+        "threshold": 0.08
+    },
+    "политика": {
+        "name": "🏛️ Политика",
+        "keywords": [
+            "политика", "президент", "правительство", "парламент",
+            "выборы", "закон", "депутат", "министр", "саммит",
+            "переговоры", "соглашение", "договор", "санкции",
+            "госдума", "совет федерации", "указ", "постановление",
+            "встреча", "визит", "дипломат", "посол", "консул"
+        ],
+        "description": "политические новости, международные отношения, законы",
+        "threshold": 0.08
+    },
+    "экономика": {
+        "name": "💼 Экономика",
+        "keywords": [
+            "экономика", "бизнес", "финансы", "стартап", "инвестиции",
+            "акции", "биржа", "банк", "валюта", "рынок",
+            "компания", "корпорация", "прибыль", "убыток", "бюджет",
+            "налог", "кредит", "ипотека", "цена", "стоимость"
+        ],
+        "description": "экономические новости, бизнес, финансы",
+        "threshold": 0.08
+    }
+}
+
+# Хранилище настроек
+USER_SETTINGS_FILE = "user_settings.json"
 
 
-# ========== НАСТРОЙКИ - ВСТАВЬТЕ ВАШИ ДАННЫЕ ==========
-VK_TOKEN = "vk1.a.tpPdhgLXTzh9Xgj17Ba3tWM1IV8PLwLolSblC_FtcqeC8y3_n4ITsetsJkJPtxoZ95Lx9eEWEVEmWhTfqMHMUR4uon7J1fnL6w6RrHlLo5NHkNlEc9Qb_LWB0NMEM2Qpoey6rhRN1gsuQARlI7-NpOSCRClJsYcHRuAeYzbFmFrLj_iJaD1vs1FOlq9vvqfBf11Ru6UhwEuRcp-_W0fODw"
-GROUP_ID = 237717966  # ID вашей группы
+def load_user_settings() -> Dict:
+    try:
+        with open(USER_SETTINGS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except:
+        return {}
 
 
-# ========== БАЗА ДАННЫХ ==========
-def init_db():
-    """Создаёт таблицы для хранения подписок пользователей"""
-    conn = sqlite3.connect('newsagent.db')
-    cursor = conn.cursor()
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
-            topic TEXT DEFAULT 'technology',
-            style TEXT DEFAULT 'formal',
-            is_active INTEGER DEFAULT 1,
-            registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS sent_news (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            news_id TEXT UNIQUE,
-            user_id INTEGER,
-            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-
-    conn.commit()
-    conn.close()
+def save_user_settings(settings: Dict):
+    with open(USER_SETTINGS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(settings, f, ensure_ascii=False, indent=2)
 
 
-# ========== РАБОТА С ПОЛЬЗОВАТЕЛЯМИ ==========
-def register_user(user_id: int, topic: str = "technology", style: str = "formal"):
-    """Регистрирует пользователя в базе"""
-    conn = sqlite3.connect('newsagent.db')
-    cursor = conn.cursor()
-
-    cursor.execute('''
-        INSERT OR REPLACE INTO users (user_id, topic, style, is_active)
-        VALUES (?, ?, ?, 1)
-    ''', (user_id, topic, style))
-
-    conn.commit()
-    conn.close()
+user_settings = load_user_settings()
+user_states = {}
 
 
-def get_user_settings(user_id: int):
-    """Получает настройки пользователя"""
-    conn = sqlite3.connect('newsagent.db')
-    cursor = conn.cursor()
+def get_user_topic(user_id: int) -> str:
+    uid = str(user_id)
+    if uid in user_settings and 'topic' in user_settings[uid]:
+        return user_settings[uid]['topic']
+    return "технологии"
 
-    cursor.execute('SELECT topic, style FROM users WHERE user_id = ?', (user_id,))
-    result = cursor.fetchone()
 
-    conn.close()
-
-    if result:
-        return {"topic": result[0], "style": result[1]}
+def get_user_schedule(user_id: int) -> Optional[Dict]:
+    uid = str(user_id)
+    if uid in user_settings and 'schedule' in user_settings[uid]:
+        return user_settings[uid]['schedule']
     return None
 
 
-def update_user_style(user_id: int, style: str):
-    """Обновляет стиль пользователя"""
-    if style not in STYLES:
-        return False
+# ═══════════════════════════════════════════════════════════════
+# КЛАВИАТУРЫ
+# ═══════════════════════════════════════════════════════════════
 
-    conn = sqlite3.connect('newsagent.db')
-    cursor = conn.cursor()
-    cursor.execute('UPDATE users SET style = ? WHERE user_id = ?', (style, user_id))
-    conn.commit()
-    conn.close()
-    return True
-
-
-def update_user_topic(user_id: int, topic: str):
-    """Обновляет тему пользователя"""
-    topics = ["technology", "sport", "business", "science", "it"]
-
-    if topic not in topics:
-        return False
-
-    conn = sqlite3.connect('newsagent.db')
-    cursor = conn.cursor()
-    cursor.execute('UPDATE users SET topic = ? WHERE user_id = ?', (topic, user_id))
-    conn.commit()
-    conn.close()
-    return True
+def get_main_keyboard():
+    keyboard = VkKeyboard(one_time=False)
+    keyboard.add_button("Новости", color=VkKeyboardColor.PRIMARY)
+    keyboard.add_button("Все темы", color=VkKeyboardColor.POSITIVE)  # НОВАЯ КНОПКА
+    keyboard.add_line()
+    keyboard.add_button("Моя тема", color=VkKeyboardColor.SECONDARY)
+    keyboard.add_line()
+    keyboard.add_button("Рассылка", color=VkKeyboardColor.POSITIVE)
+    keyboard.add_button("Спросить", color=VkKeyboardColor.PRIMARY)
+    keyboard.add_line()
+    keyboard.add_button("Помощь", color=VkKeyboardColor.SECONDARY)
+    return keyboard
 
 
-def get_all_active_users():
-    """Возвращает всех активных пользователей"""
-    conn = sqlite3.connect('newsagent.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT user_id, topic, style FROM users WHERE is_active = 1')
-    users = cursor.fetchall()
-    conn.close()
-    return users
+def get_style_keyboard():
+    keyboard = VkKeyboard(one_time=True)
+    keyboard.add_button("Кратко", color=VkKeyboardColor.PRIMARY)
+    keyboard.add_button("Подробно", color=VkKeyboardColor.PRIMARY)
+    keyboard.add_line()
+    keyboard.add_button("Назад", color=VkKeyboardColor.NEGATIVE)
+    return keyboard
 
 
-# ========== ОТПРАВКА НОВОСТЕЙ ==========
-def send_news_to_user(vk, user_id: int, topic: str, style: str):
-    """Генерирует и отправляет новости конкретному пользователю"""
+def get_topics_keyboard():
+    keyboard = VkKeyboard(one_time=True)
+    for topic_key, topic_info in TOPICS.items():
+        keyboard.add_button(topic_info['name'], color=VkKeyboardColor.PRIMARY)
+        keyboard.add_line()
+    keyboard.add_button("Назад", color=VkKeyboardColor.NEGATIVE)
+    return keyboard
+
+
+def get_schedule_keyboard():
+    keyboard = VkKeyboard(one_time=False)
+    keyboard.add_button("Подписаться на рассылку", color=VkKeyboardColor.POSITIVE)
+    keyboard.add_line()
+    keyboard.add_button("Моё расписание", color=VkKeyboardColor.PRIMARY)
+    keyboard.add_line()
+    keyboard.add_button("Отписаться от рассылки", color=VkKeyboardColor.NEGATIVE)
+    keyboard.add_line()
+    keyboard.add_button("Назад", color=VkKeyboardColor.SECONDARY)
+    return keyboard
+
+
+def get_days_keyboard(selected_days: List[int] = None):
+    if selected_days is None:
+        selected_days = []
+
+    days = [
+        ("Пн", 0), ("Вт", 1), ("Ср", 2),
+        ("Чт", 3), ("Пт", 4), ("Сб", 5), ("Вс", 6)
+    ]
+
+    keyboard = VkKeyboard(one_time=True)
+
+    for i, (label, day) in enumerate(days):
+        prefix = "✅ " if day in selected_days else ""
+        color = VkKeyboardColor.POSITIVE if day in selected_days else VkKeyboardColor.PRIMARY
+        keyboard.add_button(f"{prefix}{label}", color=color)
+        if i == 3:
+            keyboard.add_line()
+
+    keyboard.add_line()
+    keyboard.add_button("Готово (дни выбраны)", color=VkKeyboardColor.POSITIVE)
+    keyboard.add_line()
+    keyboard.add_button("Отмена настройки", color=VkKeyboardColor.NEGATIVE)
+    return keyboard
+
+
+def get_time_keyboard():
+    keyboard = VkKeyboard(one_time=True)
+    hours = ["07:00", "08:00", "09:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00"]
+
+    for i, h in enumerate(hours):
+        if i % 3 == 0 and i > 0:
+            keyboard.add_line()
+        keyboard.add_button(h, color=VkKeyboardColor.PRIMARY)
+
+    keyboard.add_line()
+    keyboard.add_button("Своё время (ввести)", color=VkKeyboardColor.SECONDARY)
+    keyboard.add_line()
+    keyboard.add_button("Отмена настройки", color=VkKeyboardColor.NEGATIVE)
+    return keyboard
+
+
+# ═══════════════════════════════════════════════════════════════
+# ОТПРАВКА СООБЩЕНИЙ
+# ═══════════════════════════════════════════════════════════════
+
+def send_message(user_id, text, keyboard=None):
     try:
-        # Генерируем подборку
-        news_text = run_agent(
-            style=style,
-            for_telegram=False,
-            limit_per_source=3
+        keyboard_json = keyboard.get_keyboard() if keyboard else None
+
+        if len(text) > 4000:
+            parts = [text[i:i + 4000] for i in range(0, len(text), 4000)]
+            for i, part in enumerate(parts):
+                vk.messages.send(
+                    user_id=user_id,
+                    message=part,
+                    random_id=random.randint(1, 2 ** 31),
+                    keyboard=keyboard_json if i == 0 else None
+                )
+        else:
+            vk.messages.send(
+                user_id=user_id,
+                message=text,
+                random_id=random.randint(1, 2 ** 31),
+                keyboard=keyboard_json
+            )
+    except Exception as e:
+        logger.error(f"Ошибка отправки: {e}")
+
+
+# ═══════════════════════════════════════════════════════════════
+# ПЛАНИРОВЩИК
+# ═══════════════════════════════════════════════════════════════
+
+def send_scheduled_news(user_id: int):
+    """Отправка новостей по расписанию (с кэшем дедупликации)"""
+    try:
+        topic_key = get_user_topic(user_id)
+        topic_config = TOPICS.get(topic_key, TOPICS["технологии"])
+
+        # Для рассылки используем кэш, чтобы не присылать одни и те же новости
+        digest = run_agent(
+            style="brief",
+            for_telegram=True,
+            limit_per_source=2,
+            custom_keywords=topic_config["keywords"],
+            custom_topic=topic_config["description"],
+            custom_threshold=topic_config.get("threshold", 0.08),
+            use_dedup_cache=True  # Для рассылки кэш включен
         )
 
-        # Ограничиваем длину сообщения (VK лимит 4096 символов)
-        if len(news_text) > 4000:
-            news_text = news_text[:4000] + "\n\n... (обрезано)"
-
-        # Отправляем пользователю
-        vk.messages.send(
-            user_id=user_id,
-            message=news_text,
-            random_id=0
+        send_message(
+            user_id,
+            f"📅 Авторассылка\n🏷️ {topic_config['name']}\n\n{digest}"
         )
-
-        print(f"[OK] Новости отправлены пользователю {user_id} (тема: {topic}, стиль: {style})")
 
     except Exception as e:
-        print(f"[ERROR] Ошибка при отправке пользователю {user_id}: {e}")
+        logger.error(f"Ошибка рассылки: {e}")
 
 
-def send_news_to_all():
-    """Отправляет новости всем активным пользователям"""
-    vk_session = vk_api.VkApi(token=VK_TOKEN)
-    vk = vk_session.get_api()
+def check_schedules():
+    settings = load_user_settings()
+    now = datetime.now()
+    current_day = now.weekday()
+    current_time = now.strftime("%H:%M")
 
-    users = get_all_active_users()
-    print(f"[INFO] Отправка новостей {len(users)} пользователям...")
+    for uid, config in settings.items():
+        user_id = int(uid)
+        schedule_config = config.get('schedule')
 
-    for user_id, topic, style in users:
-        send_news_to_user(vk, user_id, topic, style)
+        if not schedule_config or not schedule_config.get('enabled'):
+            continue
 
+        if current_day not in schedule_config.get('days', []):
+            continue
 
-# ========== ОБРАБОТЧИК СООБЩЕНИЙ ==========
-def create_main_keyboard():
-    """Создаёт главную клавиатуру"""
-    return {
-        "one_time": False,
-        "buttons": [
-            [
-                {"color": "primary", "action": {"type": "text", "label": "Новости"}},
-                {"color": "secondary", "action": {"type": "text", "label": "Настройки"}},
-                {"color": "secondary", "action": {"type": "text", "label": "Помощь"}}
-            ]
-        ]
-    }
+        if schedule_config.get('time') == current_time:
+            logger.info(f"Рассылка для {user_id}")
+            send_scheduled_news(user_id)
 
 
-def create_settings_keyboard():
-    """Создаёт клавиатуру настроек"""
-    return {
-        "one_time": True,
-        "buttons": [
-            [
-                {"color": "primary", "action": {"type": "text", "label": "Тема"}},
-                {"color": "primary", "action": {"type": "text", "label": "Стиль"}}
-            ],
-            [
-                {"color": "secondary", "action": {"type": "text", "label": "Назад"}}
-            ]
-        ]
-    }
+def scheduler_loop():
+    while True:
+        try:
+            check_schedules()
+        except Exception as e:
+            logger.error(f"Ошибка планировщика: {e}")
+        time.sleep(60)
 
 
-def create_topics_keyboard():
-    """Создаёт клавиатуру выбора темы"""
-    return {
-        "one_time": True,
-        "buttons": [
-            [
-                {"color": "primary", "action": {"type": "text", "label": "Технологии"}},
-                {"color": "primary", "action": {"type": "text", "label": "Спорт"}}
-            ],
-            [
-                {"color": "primary", "action": {"type": "text", "label": "Бизнес"}},
-                {"color": "primary", "action": {"type": "text", "label": "Наука"}}
-            ],
-            [
-                {"color": "primary", "action": {"type": "text", "label": "IT"}},
-                {"color": "secondary", "action": {"type": "text", "label": "Назад"}}
-            ]
-        ]
-    }
+# ═══════════════════════════════════════════════════════════════
+# НОРМАЛИЗАЦИЯ ТЕКСТА КОМАНД
+# ═══════════════════════════════════════════════════════════════
+
+def normalize_text(text: str) -> str:
+    """Убирает эмодзи и приводит к нижнему регистру для сравнения"""
+    cleaned = re.sub(r'[^\w\sа-яА-ЯёЁ]', '', text)
+    return cleaned.lower().strip()
 
 
-def create_styles_keyboard():
-    """Создаёт клавиатуру выбора стиля"""
-    return {
-        "one_time": True,
-        "buttons": [
-            [
-                {"color": "primary", "action": {"type": "text", "label": "Официальный"}},
-                {"color": "primary", "action": {"type": "text", "label": "Неформальный"}}
-            ],
-            [
-                {"color": "primary", "action": {"type": "text", "label": "Краткий"}},
-                {"color": "primary", "action": {"type": "text", "label": "Подробный"}}
-            ],
-            [
-                {"color": "secondary", "action": {"type": "text", "label": "Назад"}}
-            ]
-        ]
-    }
+# ═══════════════════════════════════════════════════════════════
+# ОБРАБОТЧИК СООБЩЕНИЙ
+# ═══════════════════════════════════════════════════════════════
 
+def handle_message(user_id, message_text):
+    # Если пользователь в процессе настройки
+    if user_id in user_states:
+        process_state(user_id, message_text)
+        return
 
-def handle_message(vk, user_id: int, message: str):
-    """Обрабатывает команды от пользователя"""
-    msg_lower = message.lower().strip()
+    # Нормализуем текст для сравнения
+    msg = message_text.strip()
+    msg_lower = msg.lower()
+    msg_clean = normalize_text(msg)
 
-    # Команда старт
-    if msg_lower in ["/start", "start", "начать", "привет"]:
-        register_user(user_id)
+    logger.info(f"Получено: '{msg}' -> normalized: '{msg_clean}'")
 
-        vk.messages.send(
-            user_id=user_id,
-            message="Привет! Я NewsAgent - твой персональный новостной бот.\n\n"
-                    "Я собираю новости из разных источников и присылаю тебе подборку.\n\n"
-                    "Нажми «Новости» - сразу получу подборку\n"
-                    "Нажми «Настройки» - изменю тему или стиль\n"
-                    "Нажми «Помощь» - покажу список команд\n\n"
-                    "Нажми на кнопку, чтобы начать!",
-            random_id=0,
-            keyboard=create_main_keyboard()
+    # 🔥 ВСЕ ТЕМЫ
+    if msg_clean == "все темы":
+        send_message(user_id, "🔍 Собираю новости по всем темам... (может занять минуту)")
+        try:
+            from agent import run_agent_all_topics
+            digest = run_agent_all_topics(
+                style="brief",
+                for_telegram=True,
+                limit_per_source=2,
+                max_news_per_topic=2
+            )
+            send_message(user_id, digest, get_main_keyboard())
+        except Exception as e:
+            logger.error(f"Ошибка: {e}")
+            send_message(user_id, "❌ Ошибка при сборе новостей. Попробуй позже.", get_main_keyboard())
+        return
+
+    # 🔥 ПРИВЕТСТВИЕ
+    if msg_clean in ["начать", "старт", "привет", "start"]:
+        topic_key = get_user_topic(user_id)
+        topic_name = TOPICS[topic_key]['name']
+        schedule_config = get_user_schedule(user_id)
+        cache_size = get_cache_size()
+
+        schedule_info = ""
+        if schedule_config and schedule_config.get('enabled'):
+            days_str = ", ".join(["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"][d] for d in schedule_config['days'])
+            schedule_info = f"\n📅 Рассылка: {days_str} в {schedule_config['time']}"
+
+        send_message(
+            user_id,
+            f"🤖 Привет! Я новостной бот с ИИ-пересказом\n\n"
+            f"🏷️ Твоя тема: {topic_name}\n"
+            f"📊 В кэше: {cache_size} новостей\n"
+            f"• Новости — свежие новости с пересказом\n"
+            f"• Моя тема — выбрать интересующую тему\n"
+            f"• Рассылка — настроить авторассылку\n"
+            f"• Спросить — задать вопрос нейросети\n"
+            f"• Обновить — сбросить кэш и получить свежие новости"
+            f"{schedule_info}\n\n"
+            f"🕒 {datetime.now().strftime('%H:%M')}",
+            get_main_keyboard()
         )
         return
 
-    # Получить новости
-    if msg_lower in ["новости", "новости"]:
-        settings = get_user_settings(user_id)
-        if not settings:
-            register_user(user_id)
-            settings = {"topic": "technology", "style": "formal"}
-
-        vk.messages.send(
-            user_id=user_id,
-            message="Собираю свежие новости...\nЭто может занять несколько секунд.",
-            random_id=0
-        )
-
-        send_news_to_user(vk, user_id, settings["topic"], settings["style"])
-        return
-
-    # Настройки
-    if msg_lower in ["⚙ настройки", "настройки"]:
-        settings = get_user_settings(user_id)
-        if not settings:
-            register_user(user_id)
-            settings = {"topic": "technology", "style": "formal"}
-
-        vk.messages.send(
-            user_id=user_id,
-            message=f"⚙ Твои настройки:\n\n"
-                    f"Тема: {settings['topic']}\n"
-                    f"Стиль: {settings['style']}\n\n"
-                    f"Что хочешь изменить?",
-            random_id=0,
-            keyboard=create_settings_keyboard()
+    # 🔥 ПОМОЩЬ
+    if msg_clean in ["помощь", "help"]:
+        cache_size = get_cache_size()
+        send_message(
+            user_id,
+            "📌 Возможности бота:\n\n"
+            "📰 Новости — свежие новости с ИИ-пересказом\n"
+            "🏷️ Моя тема — выбрать тему\n"
+            "📅 Рассылка — авто-рассылка по расписанию\n"
+            "❓ Спросить [вопрос] — вопрос нейросети\n"
+            "🔄 Обновить — сбросить кэш для свежих новостей\n\n"
+            f"📊 В кэше: {cache_size} новостей\n"
+            "💡 Кэш автоочищается каждые 2 часа\n\n"
+            "Стили: Кратко / Подробно / Разговорный / Деловой",
+            get_main_keyboard()
         )
         return
 
-    # Смена темы
-    if msg_lower in ["тема", "тема"]:
-        vk.messages.send(
-            user_id=user_id,
-            message="Выбери тему новостей:\n\n"
-                    "Технологии - ИИ, нейросети, гаджеты\n"
-                    "Спорт - футбол, хоккей, теннис\n"
-                    "Бизнес - экономика, финансы\n"
-                    "Наука - космос, открытия\n"
-                    "IT - программирование, разработка",
-            random_id=0,
-            keyboard=create_topics_keyboard()
+    # 🔥 ОБНОВИТЬ (сброс кэша)
+    if msg_clean in ["обновить", "сброс", "сбросить кэш", "очистить кэш"]:
+        clear_sent_cache()
+        cache_size = get_cache_size()
+        send_message(
+            user_id,
+            f"🔄 Кэш очищен!\n📊 В кэше: {cache_size} новостей\n\n"
+            "Теперь можно запросить свежие новости.",
+            get_main_keyboard()
         )
         return
 
-    # Обработка выбора темы
-    topic_map = {
-        "технологии": "technology",
-        "технологии": "technology",
-        "спорт": "sport",
-        "спорт": "sport",
-        "бизнес": "business",
-        "бизнес": "business",
-        "наука": "science",
-        "наука": "science",
-        "it": "it",
-        "it": "it"
-    }
-
-    for display, topic_key in topic_map.items():
-        if msg_lower == display.lower():
-            if update_user_topic(user_id, topic_key):
-                vk.messages.send(
-                    user_id=user_id,
-                    message=f"Тема изменена на {topic_key}\n\n"
-                            f"Нажми «Новости», чтобы увидеть подборку!",
-                    random_id=0,
-                    keyboard=create_main_keyboard()
-                )
-            return
-
-    # Смена стиля
-    if msg_lower in ["стиль", "стиль"]:
-        vk.messages.send(
-            user_id=user_id,
-            message="Выбери стиль изложения:\n\n"
-                    "Официальный - деловой, профессиональный\n"
-                    "Неформальный - дружелюбный, с эмодзи\n"
-                    "Краткий - только самое важное\n"
-                    "Подробный - максимально детально",
-            random_id=0,
-            keyboard=create_styles_keyboard()
-        )
+    # 🔥 НОВОСТИ
+    if msg_clean == "новости":
+        send_message(user_id, "📰 Выбери стиль пересказа:", get_style_keyboard())
         return
 
-    # Обработка выбора стиля
+    # 🔥 СТИЛИ НОВОСТЕЙ
     style_map = {
-        "официальный": "formal",
-        "официальный": "formal",
-        "неформальный": "casual",
-        "неформальный": "casual",
-        "краткий": "brief",
-        "краткий": "brief",
-        "подробный": "detailed",
-        "подробный": "detailed"
+        "кратко": "brief",
+        "подробно": "detailed"
     }
 
-    for display, style_key in style_map.items():
-        if msg_lower == display.lower():
-            if update_user_style(user_id, style_key):
-                vk.messages.send(
-                    user_id=user_id,
-                    message=f"Стиль изменён на {STYLES[style_key]['description']}",
-                    random_id=0,
-                    keyboard=create_main_keyboard()
-                )
+    if msg_clean in style_map:
+        style = style_map[msg_clean]
+        topic_key = get_user_topic(user_id)
+        topic_config = TOPICS[topic_key]
+
+        send_message(user_id, f"🔍 Собираю новости: {topic_config['name']}...")
+
+        try:
+            # Для ручных запросов НЕ используем кэш дедупликации
+            digest = run_agent(
+                style=style,
+                for_telegram=True,
+                limit_per_source=3,
+                custom_keywords=topic_config["keywords"],
+                custom_topic=topic_config["description"],
+                custom_threshold=topic_config.get("threshold", 0.08),
+                use_dedup_cache=False  # 🔑 Ключевое изменение!
+            )
+            send_message(user_id, f"🏷️ {topic_config['name']}\n\n{digest}", get_main_keyboard())
+
+        except Exception as e:
+            logger.error(f"Ошибка: {e}")
+            send_message(user_id, f"❌ Ошибка при сборе новостей. Попробуй позже.", get_main_keyboard())
+        return
+
+    # 🔥 МОЯ ТЕМА
+    if msg_clean in ["моя тема", "тема"]:
+        current_key = get_user_topic(user_id)
+        current_name = TOPICS[current_key]['name']
+        send_message(
+            user_id,
+            f"🏷️ Текущая тема: {current_name}\n\nВыбери новую тему:",
+            get_topics_keyboard()
+        )
+        return
+
+    # 🔥 ВЫБОР ТЕМЫ (по названиям)
+    for topic_key, topic_info in TOPICS.items():
+        if msg_clean == normalize_text(topic_info['name']) or msg_clean == topic_key:
+            uid = str(user_id)
+            if uid not in user_settings:
+                user_settings[uid] = {}
+            user_settings[uid]['topic'] = topic_key
+            save_user_settings(user_settings)
+
+            send_message(
+                user_id,
+                f"✅ Тема изменена на {topic_info['name']}",
+                get_main_keyboard()
+            )
             return
 
-    # Помощь
-    if msg_lower in ["ℹ помощь", "помощь", "/help"]:
-        vk.messages.send(
-            user_id=user_id,
-            message="ℹ Помощь по командам:\n\n"
-                    "Новости - получить свежую подборку\n"
-                    "Настройки - изменить тему или стиль\n"
-                    "Тема - выбрать категорию новостей\n"
-                    "Стиль - выбрать стиль изложения\n"
-                    "Назад - вернуться в главное меню\n\n"
-                    "Бот обновляет новости каждый час\n\n"
-                    "Есть вопросы? Пиши разработчику!",
-            random_id=0,
-            keyboard=create_main_keyboard()
+    # 🔥 РАССЫЛКА
+    if msg_clean in ["рассылка", "рассылка новостей"]:
+        schedule_config = get_user_schedule(user_id)
+
+        if schedule_config and schedule_config.get('enabled'):
+            days_str = ", ".join(["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"][d] for d in schedule_config['days'])
+            info = f"📅 Рассылка активна\n📆 Дни: {days_str}\n⏰ Время: {schedule_config['time']}"
+        else:
+            info = "📅 Рассылка не настроена"
+
+        send_message(user_id, info, get_schedule_keyboard())
+        return
+
+    # 🔥 ПОДПИСКА НА РАССЫЛКУ
+    if msg_clean in ["подписаться на рассылку", "подписаться"]:
+        user_states[user_id] = {
+            "state": "choosing_days",
+            "data": {"selected_days": []}
+        }
+        send_message(
+            user_id,
+            "📆 Выбери дни недели (нажимай на кнопки):\nЗатем нажми «Готово»",
+            get_days_keyboard([])
         )
         return
 
-    # Назад
-    if msg_lower in ["назад", "назад"]:
-        vk.messages.send(
-            user_id=user_id,
-            message="Вернулись в главное меню",
-            random_id=0,
-            keyboard=create_main_keyboard()
-        )
+    # 🔥 МОЁ РАСПИСАНИЕ
+    if msg_clean in ["моё расписание", "мое расписание", "расписание"]:
+        schedule_config = get_user_schedule(user_id)
+        if schedule_config:
+            days_str = ", ".join(["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"][d] for d in schedule_config['days'])
+            status = "активна" if schedule_config.get('enabled') else "отключена"
+            send_message(
+                user_id,
+                f"📅 Расписание:\n📆 Дни: {days_str}\n⏰ Время: {schedule_config['time']}\n✅ Статус: {status}",
+                get_schedule_keyboard()
+            )
+        else:
+            send_message(user_id, "📅 Расписание не настроено.", get_schedule_keyboard())
         return
 
-    # Ответ по умолчанию
-    vk.messages.send(
-        user_id=user_id,
-        message="Не понял команду.\n\n"
-                "Нажми на кнопку или введи:\n"
-                "«Новости» - получить подборку\n"
-                "«Настройки» - изменить параметры\n"
-                "«Помощь» - список команд",
-        random_id=0,
-        keyboard=create_main_keyboard()
+    # 🔥 ОТПИСКА
+    if msg_clean in ["отписаться от рассылки", "отписаться"]:
+        uid = str(user_id)
+        if uid in user_settings and 'schedule' in user_settings[uid]:
+            user_settings[uid]['schedule']['enabled'] = False
+            save_user_settings(user_settings)
+            send_message(user_id, "❌ Рассылка отключена.", get_main_keyboard())
+        else:
+            send_message(user_id, "У тебя нет активной рассылки.", get_main_keyboard())
+        return
+
+    # 🔥 СПРОСИТЬ
+    if msg_clean.startswith("спросить"):
+        question = msg.replace("Спросить", "").replace("спросить", "").strip()
+        if not question:
+            send_message(user_id, "❓ Напиши вопрос. Например:\nСпросить что такое нейросеть?")
+            return
+
+        send_message(user_id, "🔎 Ищу ответ...")
+        try:
+            answer = ask_question(question)
+            send_message(user_id, answer, get_main_keyboard())
+        except Exception as e:
+            send_message(user_id, f"❌ Ошибка: {e}", get_main_keyboard())
+        return
+
+    # 🔥 НАЗАД
+    if msg_clean == "назад":
+        send_message(user_id, "🔙 Главное меню:", get_main_keyboard())
+        return
+
+    # 🔥 НЕИЗВЕСТНАЯ КОМАНДА
+    send_message(
+        user_id,
+        "🤔 Не понял команду. Используй кнопки меню:\n"
+        "• Новости — получить новости\n"
+        "• Моя тема — сменить тему\n"
+        "• Рассылка — настроить расписание\n"
+        "• Спросить [вопрос] — задать вопрос\n"
+        "• Обновить — сбросить кэш",
+        get_main_keyboard()
     )
 
 
-# ========== ЗАПУСК БОТА ==========
-def run_vk_bot():
-    """Запускает VK-бота в режиме Long Poll"""
-    init_db()
+# ═══════════════════════════════════════════════════════════════
+# ОБРАБОТКА СОСТОЯНИЙ (настройка рассылки)
+# ═══════════════════════════════════════════════════════════════
 
-    vk_session = vk_api.VkApi(token=VK_TOKEN)
-    vk = vk_session.get_api()
-    longpoll = VkBotLongPoll(vk_session, GROUP_ID)
+def process_state(user_id, msg):
+    state = user_states[user_id]
+    msg_clean = normalize_text(msg)
 
+    if msg_clean in ["отмена настройки", "отмена"]:
+        del user_states[user_id]
+        send_message(user_id, "❌ Настройка отменена.", get_main_keyboard())
+        return
+
+    if state["state"] == "choosing_days":
+        handle_day_selection(user_id, msg_clean, state)
+    elif state["state"] == "choosing_time":
+        handle_time_selection(user_id, msg_clean, state)
+    elif state["state"] == "choosing_custom_time":
+        handle_custom_time(user_id, msg.strip(), state)
+
+
+def handle_day_selection(user_id, msg_clean, state):
+    selected_days = state["data"]["selected_days"]
+
+    if msg_clean in ["готово", "готово дни выбраны"]:
+        if not selected_days:
+            send_message(user_id, "❌ Выбери хотя бы один день!", get_days_keyboard(selected_days))
+            return
+
+        state["state"] = "choosing_time"
+        state["data"]["days"] = selected_days
+
+        days_str = ", ".join(["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"][d] for d in selected_days)
+        send_message(
+            user_id,
+            f"✅ Дни: {days_str}\n\n⏰ Выбери время:",
+            get_time_keyboard()
+        )
+        return
+
+    # Проверяем выбор дня
+    day_names = {"пн": 0, "вт": 1, "ср": 2, "чт": 3, "пт": 4, "сб": 5, "вс": 6}
+
+    for day_name, day_num in day_names.items():
+        if day_name in msg_clean:
+            if day_num in selected_days:
+                selected_days.remove(day_num)
+            else:
+                selected_days.append(day_num)
+
+            send_message(
+                user_id,
+                f"📆 Выбрано дней: {len(selected_days)}",
+                get_days_keyboard(selected_days)
+            )
+            return
+
+
+def handle_time_selection(user_id, msg_clean, state):
+    if msg_clean in ["своё время", "свое время ввести"]:
+        state["state"] = "choosing_custom_time"
+        send_message(user_id, "⏰ Введи время в формате ЧЧ:ММ (например, 09:30):")
+        return
+
+    # Проверяем формат времени
+    time_match = re.match(r'^(\d{2}):(\d{2})$', msg_clean)
+    if time_match:
+        state["data"]["time"] = msg_clean
+        save_schedule(user_id, state["data"])
+        del user_states[user_id]
+        return
+
+
+def handle_custom_time(user_id, msg_text, state):
+    time_match = re.match(r'^(\d{1,2})[:.](\d{2})$', msg_text.strip())
+
+    if time_match:
+        hour, minute = time_match.groups()
+        hour = int(hour)
+        minute = int(minute)
+
+        if 0 <= hour <= 23 and 0 <= minute <= 59:
+            state["data"]["time"] = f"{hour:02d}:{minute:02d}"
+            save_schedule(user_id, state["data"])
+            del user_states[user_id]
+            return
+
+    send_message(user_id, "❌ Неверный формат. Введи время как ЧЧ:ММ (например, 09:30):")
+
+
+def save_schedule(user_id, data):
+    uid = str(user_id)
+
+    if uid not in user_settings:
+        user_settings[uid] = {}
+
+    user_settings[uid]['schedule'] = {
+        "days": sorted(data["days"]),
+        "time": data["time"],
+        "enabled": True
+    }
+
+    save_user_settings(user_settings)
+
+    days_str = ", ".join(["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"][d] for d in data["days"])
+    send_message(
+        user_id,
+        f"✅ Рассылка настроена!\n\n"
+        f"📆 Дни: {days_str}\n"
+        f"⏰ Время: {data['time']}\n\n"
+        f"Новости будут приходить автоматически.",
+        get_main_keyboard()
+    )
+    logger.info(f"Рассылка для {user_id}: {data}")
+
+
+# ═══════════════════════════════════════════════════════════════
+# ЗАПУСК
+# ═══════════════════════════════════════════════════════════════
+
+def main():
     print("=" * 50)
-    print("VK-бот NewsAgent запущен!")
-    print(f"ID группы: {GROUP_ID}")
-    print("Ожидание сообщений...")
+    print("🤖 NewsAgent v3.2 ЗАПУЩЕН")
+    print("📡 Ожидание сообщений...")
+    print("💡 Кэш дедупликации отключен для ручных запросов")
+    print("💡 Кэш автоочищается каждые 2 часа")
     print("=" * 50)
+
+    # Запускаем планировщик
+    scheduler_thread = threading.Thread(target=scheduler_loop, daemon=True)
+    scheduler_thread.start()
+    logger.info("Планировщик запущен")
 
     for event in longpoll.listen():
-        if event.type == VkBotEventType.MESSAGE_NEW:
-            if event.object.message:
-                user_id = event.object.message['from_id']
-                message = event.object.message['text']
-                print(f"[MSG] От {user_id}: {message[:50]}")
-                handle_message(vk, user_id, message)
+        if event.type == VkEventType.MESSAGE_NEW and event.to_me:
+            user_id = event.user_id
+            message_text = event.text
+
+            print(f"\n[{datetime.now().strftime('%H:%M:%S')}] user_{user_id}: {message_text}")
+
+            try:
+                handle_message(user_id, message_text)
+            except Exception as e:
+                logger.error(f"Ошибка: {e}")
+                import traceback
+                traceback.print_exc()
+                try:
+                    send_message(user_id, "❌ Ошибка. Попробуй позже.", get_main_keyboard())
+                except:
+                    pass
 
 
-# ========== ФОНОВЫЙ ПОСТИНГ ==========
-def schedule_news():
-    """Фоновый поток для периодической рассылки"""
-    time.sleep(30)  # Ждём 30 секунд перед первой рассылкой
-    while True:
-        print(f"\n{datetime.now()} - Плановая рассылка новостей")
-        send_news_to_all()
-        time.sleep(CHECK_INTERVAL)
-
-
-# ========== ТОЧКА ВХОДА ==========
 if __name__ == "__main__":
-    # Запуск фонового потока для рассылки
-    news_thread = threading.Thread(target=schedule_news, daemon=True)
-    news_thread.start()
-
-    # Запуск основного бота
-    try:
-        run_vk_bot()
-    except KeyboardInterrupt:
-        print("\nБот остановлен пользователем")
-    except Exception as e:
-        print(f"\nКритическая ошибка: {e}")
+    main()
