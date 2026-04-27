@@ -81,7 +81,7 @@ REQUEST_TIMEOUT = 5
 CHECK_INTERVAL = 3600
 
 # ФИЛЬТРАЦИЯ
-CONTEXT_THRESHOLD = 0.1  # Понижен с 0.3 до 0.1 для лучшего захвата
+CONTEXT_THRESHOLD = 0.15
 USE_SENT_CACHE = True
 
 # СТИЛИ
