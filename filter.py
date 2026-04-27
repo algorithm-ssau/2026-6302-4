@@ -79,6 +79,24 @@ def filter_by_keywords(news_list: List[Dict[str, Any]], keywords: List[str]) -> 
     return filtered_news
 
 
+def filter_by_keywords_weighted(news_list, keywords):
+    """Взвешенный фильтр: новость проходит, если ключевое слово в заголовке ИЛИ есть в тексте И общий вес > порога"""
+    keywords_lower = [kw.lower() for kw in keywords]
+
+    filtered = []
+    for news in news_list:
+        title = (news.get('title') or '').lower()
+        content = (news.get('content') or '').lower()
+
+        has_in_title = any(kw in title for kw in keywords_lower)
+        has_in_content = any(kw in content for kw in keywords_lower)
+
+        # Настоящая научная новость почти всегда упоминает тему в заголовке
+        if has_in_title or (has_in_content and len(has_in_content_matches) >= 2):
+            filtered.append(news)
+
+    return filtered
+
 def filter_by_context(news_list: List[Dict], topic_description: str,
                       threshold: float = 0.1) -> List[Dict]:
     """
@@ -161,3 +179,105 @@ def clear_sent_cache():
 def get_cache_size() -> int:
     """Возвращает текущий размер кэша"""
     return len(SENT_NEWS_CACHE)
+
+
+def rank_by_topic_relevance(news_list: List[Dict], topic_keywords: List[str]) -> List[Dict]:
+    """
+    Сортирует новости по релевантности теме.
+    Новости с ключевыми словами в заголовке получают больший вес.
+    """
+    topic_keywords_lower = [kw.lower() for kw in topic_keywords]
+
+    for news in news_list:
+        title = (news.get('title') or '').lower()
+        content = (news.get('content') or '').lower()
+
+        # Считаем релевантность
+        score = 0
+
+        # Слова в заголовке весят больше (2x)
+        for kw in topic_keywords_lower:
+            if kw in title:
+                score += 2
+            if kw in content:
+                score += 1
+
+        # Если ключевые слова в начале текста (первые 500 символов) — бонус
+        if content and any(kw in content[:500] for kw in topic_keywords_lower):
+            score += 1.5
+
+        news['relevance_score'] = score
+
+    # Сортируем по убыванию релевантности
+    sorted_news = sorted(news_list, key=lambda x: x.get('relevance_score', 0), reverse=True)
+
+    # Логируем топ-3
+    if sorted_news:
+        top_scores = [n.get('relevance_score', 0) for n in sorted_news[:3]]
+        logger.info(f"   Топ-3 релевантности: {top_scores}")
+
+    return sorted_news
+
+
+def rank_by_topic_relevance(news_list: List[Dict], topic_keywords: List[str]) -> List[Dict]:
+    """
+    Сортирует новости по релевантности теме.
+    Новости с ключевыми словами в заголовке получают больший вес.
+    """
+    if not news_list or not topic_keywords:
+        return news_list
+
+    topic_keywords_lower = [kw.lower() for kw in topic_keywords]
+
+    for news in news_list:
+        title = (news.get('title') or '').lower()
+        content = (news.get('content') or '').lower()
+
+        # Считаем релевантность
+        score = 0
+
+        # Слова в заголовке весят больше (2x)
+        for kw in topic_keywords_lower:
+            if kw in title:
+                score += 2
+            if kw in content:
+                score += 1
+
+        # Если ключевые слова в начале текста (первые 500 символов) — бонус
+        if content and any(kw in content[:500] for kw in topic_keywords_lower):
+            score += 1.5
+
+        news['relevance_score'] = score
+
+    # Сортируем по убыванию релевантности
+    sorted_news = sorted(news_list, key=lambda x: x.get('relevance_score', 0), reverse=True)
+
+    # Логируем топ-3
+    if sorted_news:
+        top_scores = [n.get('relevance_score', 0) for n in sorted_news[:3]]
+        logger.info(f"   Топ-3 релевантности: {top_scores}")
+
+    return sorted_news
+
+
+def filter_exclude_by_topic(news_list: List[Dict], topic_key: str) -> List[Dict]:
+    """Исключает новости, содержащие стоп-слова для данной темы"""
+    if topic_key not in EXCLUDE_WORDS:
+        return news_list
+
+    exclude_words = EXCLUDE_WORDS[topic_key]
+    if not exclude_words:
+        return news_list
+
+    filtered = []
+    for news in news_list:
+        title = (news.get('title') or '').lower()
+        content = (news.get('content') or '').lower()
+        text = f"{title} {content}"
+
+        # Если есть хоть одно стоп-слово - пропускаем новость
+        if not any(word in text for word in exclude_words):
+            filtered.append(news)
+
+    logger.info(f"   Исключено новостей с стоп-словами: {len(news_list) - len(filtered)}")
+    return filtered
