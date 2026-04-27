@@ -1,1 +1,11 @@
-scikit-learn>=1.0.0
+vk-api
+python-dotenv
+beautifulsoup4
+requests
+feedparser
+scikit-learn
+transformers
+torch
+duckduckgo-search
+apscheduler
+python-dateutil
