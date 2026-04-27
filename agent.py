@@ -5,6 +5,7 @@
 import logging
 from typing import List, Dict, Optional
 from datetime import datetime
+from filter import filter_exclude_by_topic
 
 from config import (
     KEYWORDS,
@@ -69,10 +70,10 @@ def normalize_news(news_list: List[Dict]) -> List[Dict]:
 def filter_all_news(news_list: List[Dict],
                     keywords: Optional[List[str]] = None,
                     topic_description: Optional[str] = None,
-                    threshold: Optional[float] = None) -> List[Dict]:
-    logger.info("=" * 60)
+                    threshold: Optional[float] = None,
+                    topic_key: Optional[str] = None) -> List[Dict]:
     logger.info("ФИЛЬТРАЦИЯ")
-    logger.info("=" * 60)
+
 
     if keywords is None:
         keywords = KEYWORDS
@@ -90,6 +91,11 @@ def filter_all_news(news_list: List[Dict],
         logger.error(f"   Ошибка фильтра по ключевым словам: {e}")
     logger.info(f"   После фильтра по ключевым словам: {len(filtered)}")
 
+    if topic_key:
+        from filter import filter_exclude_by_topic
+        filtered = filter_exclude_by_topic(filtered, topic_key)
+        logger.info(f"   После исключения стоп-слов: {len(filtered)}")
+
     if len(filtered) == 0:
         logger.warning("   ⚠️ Все новости отфильтрованы по ключевым словам!")
         return filtered
@@ -105,7 +111,16 @@ def filter_all_news(news_list: List[Dict],
         logger.warning("   ⚠️ Контекстный фильтр отсеял все новости!")
         logger.info("   🔄 Возвращаем результаты после фильтра по ключевым словам")
         filtered = filter_by_keywords(news_list, keywords)
+    """
+    # После контекстного фильтра, перед возвратом
+    if keywords:
+        #filtered = rank_by_topic_relevance(filtered, keywords)
 
+        # Оставляем только новости с релевантностью > порога
+        min_relevance = 1.0
+        filtered = [n for n in filtered if n.get('relevance_score', 0) >= min_relevance]
+        logger.info(f"   После ранжирования по релевантности: {len(filtered)}")
+"""
     return filtered
 
 
@@ -430,9 +445,8 @@ def run_agent(style: str = None,
             normalized_news,
             keywords=custom_keywords,
             topic_description=custom_topic,
-            threshold=custom_threshold
+            threshold=custom_threshold,
         )
-        filtered_news = normalized_news
         if not filtered_news:
             return format_output([], for_telegram, style)
 
@@ -485,12 +499,16 @@ def run_agent_all_topics(style: str = None,
 
             normalized_news = normalize_news(raw_news)
 
-            filtered_news = filter_all_news(
-                normalized_news,
-                keywords=topic_config["keywords"],
-                topic_description=topic_config["description"],
-                threshold=topic_config.get("threshold", 0.08)
-            )
+            # Для "Всех тем" используем более мягкую фильтрацию
+            filtered_news = filter_by_keywords(normalized_news, topic_config["keywords"])
+
+            # Контекстный фильтр отключаем или сильно снижаем порог
+            if len(filtered_news) > 5:  # только если много новостей
+                filtered_news = filter_by_context(
+                    filtered_news,
+                    topic_config["description"],
+                    threshold=0.01  # очень низкий порог
+                )
 
             if not filtered_news:
                 logger.warning(f"   Новости не прошли фильтрацию для {topic_key}")
