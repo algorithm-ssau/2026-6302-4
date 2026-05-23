@@ -89,12 +89,16 @@ def filter_by_keywords_weighted(news_list, keywords):
         content = (news.get('content') or '').lower()
 
         has_in_title = any(kw in title for kw in keywords_lower)
-        has_in_content = any(kw in content for kw in keywords_lower)
+        # Исправлено: считаем количество совпадений в контенте
+        content_matches = [kw for kw in keywords_lower if kw in content]
+        has_in_content = len(content_matches) > 0
 
         # Настоящая научная новость почти всегда упоминает тему в заголовке
-        if has_in_title or (has_in_content and len(has_in_content_matches) >= 2):
+        # ИЛИ имеет несколько ключевых слов в тексте
+        if has_in_title or (has_in_content and len(content_matches) >= 2):
             filtered.append(news)
 
+    logger.info(f"   Взвешенный фильтр: {len(filtered)} из {len(news_list)}")
     return filtered
 
 def filter_by_context(news_list: List[Dict], topic_description: str,
@@ -186,44 +190,6 @@ def rank_by_topic_relevance(news_list: List[Dict], topic_keywords: List[str]) ->
     Сортирует новости по релевантности теме.
     Новости с ключевыми словами в заголовке получают больший вес.
     """
-    topic_keywords_lower = [kw.lower() for kw in topic_keywords]
-
-    for news in news_list:
-        title = (news.get('title') or '').lower()
-        content = (news.get('content') or '').lower()
-
-        # Считаем релевантность
-        score = 0
-
-        # Слова в заголовке весят больше (2x)
-        for kw in topic_keywords_lower:
-            if kw in title:
-                score += 2
-            if kw in content:
-                score += 1
-
-        # Если ключевые слова в начале текста (первые 500 символов) — бонус
-        if content and any(kw in content[:500] for kw in topic_keywords_lower):
-            score += 1.5
-
-        news['relevance_score'] = score
-
-    # Сортируем по убыванию релевантности
-    sorted_news = sorted(news_list, key=lambda x: x.get('relevance_score', 0), reverse=True)
-
-    # Логируем топ-3
-    if sorted_news:
-        top_scores = [n.get('relevance_score', 0) for n in sorted_news[:3]]
-        logger.info(f"   Топ-3 релевантности: {top_scores}")
-
-    return sorted_news
-
-
-def rank_by_topic_relevance(news_list: List[Dict], topic_keywords: List[str]) -> List[Dict]:
-    """
-    Сортирует новости по релевантности теме.
-    Новости с ключевыми словами в заголовке получают больший вес.
-    """
     if not news_list or not topic_keywords:
         return news_list
 
@@ -258,6 +224,13 @@ def rank_by_topic_relevance(news_list: List[Dict], topic_keywords: List[str]) ->
         logger.info(f"   Топ-3 релевантности: {top_scores}")
 
     return sorted_news
+
+
+# Стоп-слова для исключения по темам
+EXCLUDE_WORDS = {
+    "спорт": ["политика", "выборы", "закон"],
+    "политика": ["спорт", "матч", "турнир"],
+}
 
 
 def filter_exclude_by_topic(news_list: List[Dict], topic_key: str) -> List[Dict]:

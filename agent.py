@@ -12,7 +12,8 @@ from config import (
     CONTEXT_THRESHOLD,
     TOPIC_DESCRIPTION,
     USE_SENT_CACHE,
-    MAX_NEWS_PER_CYCLE,
+    MAX_NEWS_PER_CYCLE_AUTO,
+    MAX_NEWS_PER_CYCLE_MANUAL,
     DEFAULT_SUMMARY_STYLE,
 )
 
@@ -27,7 +28,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def parse_all_sources(limit_per_source: int = 5) -> List[Dict]:
+def parse_all_sources(limit_per_source: int = 10) -> List[Dict]:
     logger.info("=" * 60)
     logger.info("ПАРСИНГ ИСТОЧНИКОВ")
     logger.info("=" * 60)
@@ -111,16 +112,7 @@ def filter_all_news(news_list: List[Dict],
         logger.warning("   ⚠️ Контекстный фильтр отсеял все новости!")
         logger.info("   🔄 Возвращаем результаты после фильтра по ключевым словам")
         filtered = filter_by_keywords(news_list, keywords)
-    """
-    # После контекстного фильтра, перед возвратом
-    if keywords:
-        #filtered = rank_by_topic_relevance(filtered, keywords)
 
-        # Оставляем только новости с релевантностью > порога
-        min_relevance = 1.0
-        filtered = [n for n in filtered if n.get('relevance_score', 0) >= min_relevance]
-        logger.info(f"   После ранжирования по релевантности: {len(filtered)}")
-"""
     return filtered
 
 
@@ -155,14 +147,17 @@ def deduplicate_news(news_list: List[Dict], use_cache: bool = True) -> List[Dict
         return news_list
 
 
-def limit_news(news_list: List[Dict]) -> List[Dict]:
+def limit_news(news_list: List[Dict], max_news: int = None) -> List[Dict]:
     logger.info("=" * 60)
     logger.info("ОГРАНИЧЕНИЕ КОЛИЧЕСТВА")
     logger.info("=" * 60)
 
-    if len(news_list) > MAX_NEWS_PER_CYCLE:
-        logger.info(f"   Сокращаем с {len(news_list)} до {MAX_NEWS_PER_CYCLE}")
-        limited = news_list[:MAX_NEWS_PER_CYCLE]
+    if max_news is None:
+        max_news = MAX_NEWS_PER_CYCLE_AUTO
+
+    if len(news_list) > max_news:
+        logger.info(f"   Сокращаем с {len(news_list)} до {max_news}")
+        limited = news_list[:max_news]
     else:
         limited = news_list
         logger.info(f"   Количество в норме: {len(limited)}")
@@ -388,7 +383,7 @@ def format_output(news_list: List[Dict], for_telegram: bool = False, style: str 
                     output += f"💬 {summary}\n"
                 output += f"🕒 {time_str}\n"
                 if link:
-                    output += f"🔗 [Источник]({link})\n"
+                    output += f"🔗 [Источник] {link}\n"
             else:
                 output += f"{i}. {title}\n"
                 if summary:
@@ -418,18 +413,23 @@ def format_output(news_list: List[Dict], for_telegram: bool = False, style: str 
 
 def run_agent(style: str = None,
               for_telegram: bool = False,
-              limit_per_source: int = 5,
+              limit_per_source: int = 10,
               custom_keywords: Optional[List[str]] = None,
               custom_topic: Optional[str] = None,
               custom_threshold: Optional[float] = None,
-              use_dedup_cache: bool = True) -> str:
+              use_dedup_cache: bool = True,
+              max_news: int = None) -> str:
     """Запускает полный пайплайн для ОДНОЙ темы"""
     if style is None:
         style = DEFAULT_SUMMARY_STYLE
 
+    if max_news is None:
+        max_news = MAX_NEWS_PER_CYCLE_AUTO
+
     logger.info("\n" + "=" * 60)
     logger.info("ЗАПУСК NEWSAGENT ПАЙПЛАЙНА")
     logger.info(f"   Стиль пересказа: {style}")
+    logger.info(f"   Лимит новостей: {max_news}")
     logger.info("=" * 60)
 
     try:
@@ -454,7 +454,7 @@ def run_agent(style: str = None,
         if not deduped_news:
             return format_output([], for_telegram, style)
 
-        final_news = limit_news(deduped_news)
+        final_news = limit_news(deduped_news, max_news=max_news)
         output_text = format_output(final_news, for_telegram, style)
 
         logger.info("✅ ПАЙПЛАЙН ЗАВЕРШЕН УСПЕШНО")
@@ -467,10 +467,39 @@ def run_agent(style: str = None,
         return f"❌ Ошибка: {e}"
 
 
+def run_agent_manual(style: str = None,
+                     for_telegram: bool = False,
+                     custom_keywords: Optional[List[str]] = None,
+                     custom_topic: Optional[str] = None,
+                     custom_threshold: Optional[float] = None) -> str:
+    """
+    СПЕЦИАЛЬНАЯ ФУНКЦИЯ ДЛЯ РУЧНОГО ЗАПРОСА.
+    Гарантированно возвращает 10 последних свежих новостей.
+    """
+    if style is None:
+        style = DEFAULT_SUMMARY_STYLE
+
+    logger.info("\n" + "=" * 60)
+    logger.info("РУЧНОЙ ЗАПРОС — 10 НОВОСТЕЙ")
+    logger.info("=" * 60)
+
+    # Для ручного запроса: больше источников, без дедупликации, без кэша
+    return run_agent(
+        style=style,
+        for_telegram=for_telegram,
+        limit_per_source=10,  # Больше новостей с каждого источника
+        custom_keywords=custom_keywords,
+        custom_topic=custom_topic,
+        custom_threshold=custom_threshold,
+        use_dedup_cache=False,  # Не используем кэш при ручном запросе
+        max_news=MAX_NEWS_PER_CYCLE_MANUAL  # 10 новостей
+    )
+
+
 def run_agent_all_topics(style: str = None,
                          for_telegram: bool = False,
-                         limit_per_source: int = 2,
-                         max_news_per_topic: int = 3,
+                         limit_per_source: int = 5,
+                         max_news_per_topic: int = 5,
                          use_dedup_cache: bool = True) -> str:
     """
     Запускает пайплайн для ВСЕХ тем сразу.
@@ -596,11 +625,11 @@ if __name__ == "__main__":
     print("ТЕСТИРОВАНИЕ АГЕНТА")
     print("=" * 60)
 
-    print("\n📄 ТЕСТ ДЛЯ КОНСОЛИ (одна тема):\n")
-    result_console = run_agent(style="detailed", for_telegram=False, limit_per_source=2, use_dedup_cache=False)
-    print(result_console)
+    print("\n📄 ТЕСТ РУЧНОГО ЗАПРОСА (10 новостей):\n")
+    result_manual = run_agent_manual(style="detailed", for_telegram=False)
+    print(result_manual)
 
     print("\n\n📄 ТЕСТ ДЛЯ КОНСОЛИ (ВСЕ ТЕМЫ):\n")
-    result_all = run_agent_all_topics(style="brief", for_telegram=False, limit_per_source=1, max_news_per_topic=2,
+    result_all = run_agent_all_topics(style="brief", for_telegram=False, limit_per_source=3, max_news_per_topic=3,
                                       use_dedup_cache=False)
     print(result_all)

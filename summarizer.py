@@ -24,12 +24,6 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 # Бесплатные модели для пересказа (быстрые и легкие)
 SUMMARY_MODELS = [
-    "deepseek/deepseek-chat-v3-0324:free",
-    "deepseek/deepseek-r1:free",
-    "qwen/qwen-2.5-72b-instruct:free",
-    "mistralai/mistral-small-3.1-24b-instruct:free",
-    "moonshotai/moonlight-16b-a3b-instruct:free",
-    "nvidia/llama-3.1-nemotron-70b-instruct:free",
     "openai/gpt-4o-mini",
 ]
 
