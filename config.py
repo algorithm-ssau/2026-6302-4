@@ -74,11 +74,8 @@ HTML_SOURCES = [
 ]
 
 # ЛИМИТЫ
-# Для авторассылки — меньше, чтобы не спамить
-MAX_NEWS_PER_CYCLE_AUTO = 5
-# Для ручного запроса — 10 новостей как требует пользователь
-MAX_NEWS_PER_CYCLE_MANUAL = 10
-MAX_NEWS_PER_SOURCE = 10
+MAX_NEWS_PER_CYCLE = 10
+MAX_NEWS_PER_SOURCE = 5
 MAX_NEWS_PER_DAY_PER_USER = 20
 REQUEST_TIMEOUT = 5
 CHECK_INTERVAL = 3600
